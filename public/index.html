@@ -1,47 +1,102 @@
-const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
-const PORT = 3000;
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Онлайн Бегалка</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+      background: #1e1e1e;
+      color: white;
+    }
+    #menu {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+    #nickname {
+      padding: 10px;
+      font-size: 16px;
+      width: 200px;
+    }
+    #startBtn {
+      padding: 10px 20px;
+      margin-top: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="menu">
+    <h2>Введите ник:</h2>
+    <input id="nickname" maxlength="20" placeholder="Ваш ник"/>
+    <br>
+    <button id="startBtn">Начать</button>
+  </div>
 
-app.use(express.static(__dirname + '/public'));
+  <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
 
-const players = {};
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const menu = document.getElementById('menu');
+    const nicknameInput = document.getElementById('nickname');
+    const startBtn = document.getElementById('startBtn');
 
-io.on('connection', (socket) => {
-  console.log('Новое подключение:', socket.id);
+    let players = {};
+    let myId = null;
 
-  socket.emit('init', socket.id);
-
-  socket.on('newPlayer', (nickname) => {
-    players[socket.id] = {
-      x: 100 + Math.random() * 500,
-      y: 100 + Math.random() * 400,
-      nickname: nickname,
-      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+    startBtn.onclick = () => {
+      const nick = nicknameInput.value.trim();
+      if (!nick) return alert('Введите ник');
+      menu.style.display = 'none';
+      canvas.style.display = 'block';
+      socket.emit('newPlayer', nick);
     };
-    io.emit('state', players);
-  });
 
-  socket.on('move', (dir) => {
-    const speed = 5;
-    const p = players[socket.id];
-    if (!p) return;
+    document.addEventListener('keydown', (e) => {
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+        socket.emit('move', {
+          up: e.code === 'KeyW',
+          down: e.code === 'KeyS',
+          left: e.code === 'KeyA',
+          right: e.code === 'KeyD'
+        });
+      }
+    });
 
-    if (dir.up) p.y -= speed;
-    if (dir.down) p.y += speed;
-    if (dir.left) p.x -= speed;
-    if (dir.right) p.x += speed;
+    socket.on('init', (id) => {
+      myId = id;
+    });
 
-    io.emit('state', players);
-  });
+    socket.on('state', (serverPlayers) => {
+      players = serverPlayers;
+    });
 
-  socket.on('disconnect', () => {
-    delete players[socket.id];
-    io.emit('state', players);
-  });
-});
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const id in players) {
+        const p = players[id];
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 30, 30);
+        ctx.fillStyle = 'white';
+        ctx.font = '14px sans-serif';
+        ctx.fillText(p.nickname, p.x, p.y - 5);
+      }
+      requestAnimationFrame(gameLoop);
+    }
 
-http.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
-});
+    gameLoop();
+  </script>
+</body>
+</html>
