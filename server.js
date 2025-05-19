@@ -79,6 +79,6 @@ setInterval(() => {
   io.emit('update', { players, countdown });
 }, 1000);
 
-server.listen(8080, () => {
-  console.log('Сервер запущен на http://localhost:8080 🚀');
+server.listen(3000, () => {
+  console.log('Сервер запущен на http://localhost:3000 🚀');
 });
