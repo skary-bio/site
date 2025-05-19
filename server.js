@@ -1,67 +1,73 @@
-const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
-const PORT = 3000;
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: 8080 });
 
-app.use(express.static(__dirname + '/public'));
+let players = {};
+let countdown = 0;
+let gameRunning = false;
 
-const players = {};
-const chatHistory = []; // История чата
+wss.on('connection', (ws) => {
+  // 🎲 Создание нового игрока
+  const playerId = Date.now().toString();
+  ws.send(JSON.stringify({ type: 'init', playerId }));
 
-io.on('connection', (socket) => {
-  console.log('Новое подключение:', socket.id);
+  // 📡 Обработка сообщений
+  ws.on('message', (data) => {
+    const msg = JSON.parse(data);
 
-  // Инициализация нового игрока
-  socket.emit('init', socket.id);
+    if (msg.type === 'join') {
+      players[playerId] = {
+        id: playerId,
+        nickname: msg.nickname,
+        x: Math.random() * 800,
+        y: Math.random() * 600,
+        alive: true
+      };
+      if (Object.keys(players).length >= 3 && !gameRunning) {
+        countdown = 10;
+      }
+    } else if (msg.type === 'move') {
+      if (players[playerId]?.alive) {
+        players[playerId].x = Math.max(0, Math.min(1000, players[playerId].x + msg.dx));
+        players[playerId].y = Math.max(0, Math.min(1000, players[playerId].y + msg.dy));
+      }
+    } else if (msg.type === 'kill') {
+      if (players[msg.targetId]) {
+        players[msg.targetId].alive = false;
+      }
+    }
 
-  // Создание нового игрока
-  socket.on('newPlayer', (nickname) => {
-    players[socket.id] = {
-      x: 100 + Math.random() * 500,
-      y: 100 + Math.random() * 400,
-      nickname: nickname,
-      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
-    };
-    io.emit('state', players);
+    // 📢 Отправка обновлений всем
+    wss.clients.forEach(client => {
+      client.send(JSON.stringify({ type: 'update', players, countdown }));
+    });
   });
 
-  // Обработка движения
-  socket.on('move', (dir) => {
-    const speed = 5;
-    const p = players[socket.id];
-    if (!p) return;
-
-    if (dir.up) p.y -= speed;
-    if (dir.down) p.y += speed;
-    if (dir.left) p.x -= speed;
-    if (dir.right) p.x += speed;
-
-    io.emit('state', players);
-  });
-
-  // Обработка сообщений чата
-  socket.on('chat', (message) => {
-    const p = players[socket.id];
-    if (!p) return;
-
-    const chatMessage = {
-      nickname: p.nickname,
-      color: p.color,
-      text: message
-    };
-
-    chatHistory.push(chatMessage);
-    io.emit('chat', chatMessage); // Отправить всем подключенным игрокам
-  });
-
-  // Удаление игрока при отключении
-  socket.on('disconnect', () => {
-    delete players[socket.id];
-    io.emit('state', players);
+  // 🚪 Отключение игрока
+  ws.on('close', () => {
+    delete players[playerId];
+    if (Object.keys(players).length < 3 && countdown > 0) {
+      countdown = 0;
+    }
+    wss.clients.forEach(client => {
+      client.send(JSON.stringify({ type: 'update', players, countdown }));
+    });
   });
 });
 
-http.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
-});
+// ⏱️ Таймер обратного отсчета
+setInterval(() => {
+  if (countdown > 0) {
+    countdown--;
+    if (countdown === 0) {
+      gameRunning = true;
+      wss.clients.forEach(client => {
+        client.send(JSON.stringify({ type: 'start' }));
+      });
+    }
+  }
+  wss.clients.forEach(client => {
+    client.send(JSON.stringify({ type: 'update', players, countdown }));
+  });
+}, 1000);
+
+console.log('Сервер запущен на ws://localhost:8080 🚀');
