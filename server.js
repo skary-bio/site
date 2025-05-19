@@ -1,56 +1,69 @@
-const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8080 });
+const http = require('http');
+const { Server } = require('socket.io');
+
+const server = http.createServer();
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
 
 let players = {};
 let countdown = 0;
 let gameRunning = false;
 
-wss.on('connection', (ws) => {
+io.on('connection', (socket) => {
   // 🎲 Создание нового игрока
-  const playerId = Date.now().toString();
-  ws.send(JSON.stringify({ type: 'init', playerId }));
+  const playerId = socket.id;
+  socket.emit('init', { playerId });
 
-  // 📡 Обработка сообщений
-  ws.on('message', (data) => {
-    const msg = JSON.parse(data);
-
-    if (msg.type === 'join') {
-      players[playerId] = {
-        id: playerId,
-        nickname: msg.nickname,
-        x: Math.random() * 800,
-        y: Math.random() * 600,
-        alive: true
-      };
-      if (Object.keys(players).length >= 3 && !gameRunning) {
-        countdown = 10;
-      }
-    } else if (msg.type === 'move') {
-      if (players[playerId]?.alive) {
-        players[playerId].x = Math.max(0, Math.min(1000, players[playerId].x + msg.dx));
-        players[playerId].y = Math.max(0, Math.min(1000, players[playerId].y + msg.dy));
-      }
-    } else if (msg.type === 'kill') {
-      if (players[msg.targetId]) {
-        players[msg.targetId].alive = false;
-      }
+  // 📡 Обработка событий
+  socket.on('join', (data) => {
+    players[playerId] = {
+      id: playerId,
+      nickname: data.nickname,
+      x: Math.random() * 800,
+      y: Math.random() * 600,
+      alive: true
+    };
+    if (Object.keys(players).length >= 3 && !gameRunning) {
+      countdown = 10;
     }
-
-    // 📢 Отправка обновлений всем
-    wss.clients.forEach(client => {
-      client.send(JSON.stringify({ type: 'update', players, countdown }));
-    });
+    io.emit('update', { players, countdown });
   });
 
-  // 🚪 Отключение игрока
-  ws.on('close', () => {
+  socket.on('move', (data) => {
+    if (players[playerId]?.alive) {
+      players[playerId].x = Math.max(0, Math.min(1000, players[playerId].x + data.dx));
+      players[playerId].y = Math.max(0, Math.min(1000, players[playerId].y + data.dy));
+    }
+    io.emit('update', { players, countdown });
+  });
+
+  socket.on('kill', (data) => {
+    if (players[data.targetId]) {
+      players[data.targetId].alive = false;
+      const alivePlayers = Object.values(players).filter(p => p.alive).length;
+      if (alivePlayers <= 1) {
+        gameRunning = false;
+        countdown = 0;
+        for (const id in players) {
+          players[id].alive = true;
+          players[id].x = Math.random() * 800;
+          players[id].y = Math.random() * 600;
+        }
+      }
+    }
+    io.emit('update', { players, countdown });
+  });
+
+  socket.on('disconnect', () => {
     delete players[playerId];
     if (Object.keys(players).length < 3 && countdown > 0) {
       countdown = 0;
     }
-    wss.clients.forEach(client => {
-      client.send(JSON.stringify({ type: 'update', players, countdown }));
-    });
+    io.emit('update', { players, countdown });
   });
 });
 
@@ -58,16 +71,14 @@ wss.on('connection', (ws) => {
 setInterval(() => {
   if (countdown > 0) {
     countdown--;
-    if (countdown === 0) {
+    if (countdown === 0 && !gameRunning) {
       gameRunning = true;
-      wss.clients.forEach(client => {
-        client.send(JSON.stringify({ type: 'start' }));
-      });
+      io.emit('start');
     }
   }
-  wss.clients.forEach(client => {
-    client.send(JSON.stringify({ type: 'update', players, countdown }));
-  });
+  io.emit('update', { players, countdown });
 }, 1000);
 
-console.log('Сервер запущен на ws://localhost:8080 🚀');
+server.listen(8080, () => {
+  console.log('Сервер запущен на http://localhost:8080 🚀');
+});
