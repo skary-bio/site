@@ -1,49 +1,145 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>Онлайн Рисование</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { background: #fff; display: block; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Онлайн доска для рисования</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+        #authContainer {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #canvas {
+            border: 2px solid black;
+            display: none; /* Скрываем канвас до авторизации */
+        }
+        #nicknameInput {
+            padding: 5px;
+            margin-right: 10px;
+        }
+        #loginButton {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .nickname-label {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 2px 5px;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+    </style>
 </head>
 <body>
-<canvas id="board"></canvas>
-<script src="/socket.io/socket.io.js"></script>
-<script>
-  const canvas = document.getElementById('board');
-  const ctx = canvas.getContext('2d');
-  const socket = io();
+    <div id="authContainer">
+        <input type="text" id="nicknameInput" placeholder="Введите ваш ник" maxlength="20">
+        <button id="loginButton">Войти</button>
+    </div>
+    <canvas id="canvas" width="800" height="600"></canvas>
 
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const authContainer = document.getElementById('authContainer');
+        const nicknameInput = document.getElementById('nicknameInput');
+        const loginButton = document.getElementById('loginButton');
+        let drawing = false;
+        let isAuthenticated = false;
+        let nickname = '';
 
-  let drawing = false;
+        // Объекты для хранения меток с никами
+        const nicknameLabels = new Map();
 
-  canvas.addEventListener('mousedown', () => drawing = true);
-  canvas.addEventListener('mouseup', () => drawing = false);
-  canvas.addEventListener('mousemove', draw);
+        // Функция авторизации
+        loginButton.addEventListener('click', () => {
+            const inputNickname = nicknameInput.value.trim();
+            if (inputNickname.length < 1) {
+                alert('Пожалуйста, введите ник!');
+                return;
+            }
+            nickname = inputNickname;
+            socket.emit('setNickname', nickname);
+            isAuthenticated = true;
+            authContainer.style.display = 'none';
+            canvas.style.display = 'block';
+        });
 
-  function draw(e) {
-    if (!drawing) return;
-    const x = e.clientX;
-    const y = e.clientY;
-    socket.emit('draw', { x, y });
+        // Обработка рисования
+        canvas.addEventListener('mousedown', (e) => {
+            if (!isAuthenticated) return;
+            drawing = true;
+            draw(e);
+        });
 
-    drawOnCanvas(x, y);
-  }
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isAuthenticated || !drawing) return;
+            draw(e);
+        });
 
-  socket.on('draw', ({ x, y }) => {
-    drawOnCanvas(x, y);
-  });
+        canvas.addEventListener('mouseup', () => {
+            drawing = false;
+        });
 
-  function drawOnCanvas(x, y) {
-    ctx.fillStyle = 'black';
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-</script>
+        canvas.addEventListener('mouseout', () => {
+            drawing = false;
+        });
+
+        function draw(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const drawData = { x, y };
+            socket.emit('draw', drawData);
+            renderDraw(drawData, nickname);
+        }
+
+        // Загрузка истории рисования
+        socket.on('loadHistory', (history) => {
+            history.forEach(drawData => {
+                renderDraw(drawData, drawData.nickname);
+            });
+        });
+
+        // Обработка новых линий от сервера
+        socket.on('draw', (data) => {
+            renderDraw(data, data.nickname);
+        });
+
+        // Функция отрисовки линии и ника
+        function renderDraw(data, nickname) {
+            // Рисуем точку
+            ctx.beginPath();
+            ctx.arc(data.x, data.y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = 'black';
+            ctx.fill();
+
+            // Создаём или обновляем метку с ником
+            const labelId = `${data.x}-${data.y}-${nickname}`;
+            if (!nicknameLabels.has(labelId)) {
+                const label = document.createElement('div');
+                label.className = 'nickname-label';
+                label.textContent = nickname;
+                label.style.left = `${data.x + canvas.offsetLeft + 15}px`;
+                label.style.top = `${data.y + canvas.offsetTop - 10}px`;
+                document.body.appendChild(label);
+                nicknameLabels.set(labelId, label);
+
+                // Удаляем метку через 3 секунды
+                setTimeout(() => {
+                    label.remove();
+                    nicknameLabels.delete(labelId);
+                }, 3000);
+            }
+        }
+    </script>
 </body>
 </html>
