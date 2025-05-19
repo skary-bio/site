@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const server = http.createServer();
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: '*', // Замени на свой домен для безопасности
     methods: ['GET', 'POST']
   }
 });
@@ -79,6 +79,8 @@ setInterval(() => {
   io.emit('update', { players, countdown });
 }, 1000);
 
-server.listen(3000, () => {
-  console.log('Сервер запущен на http://localhost:3000 🚀');
+// 🌐 Запуск сервера (порт задается через переменную окружения или 8080)
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+  console.log(`Сервер запущен на порту ${PORT} 🚀`);
 });
