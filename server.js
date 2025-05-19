@@ -23,6 +23,31 @@ io.on('connection', (socket) => {
     io.emit('state', players);
   });
 
+const express = require('express');
+const app = express();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+const PORT = 3000;
+
+app.use(express.static(__dirname + '/public'));
+
+const players = {};
+
+io.on('connection', (socket) => {
+  console.log('Новое подключение:', socket.id);
+
+  socket.emit('init', socket.id);
+
+  socket.on('newPlayer', (nickname) => {
+    players[socket.id] = {
+      x: 100 + Math.random() * 500,
+      y: 100 + Math.random() * 400,
+      nickname: nickname,
+      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+    };
+    io.emit('state', players);
+  });
+
   socket.on('move', (dir) => {
     const speed = 5;
     const p = players[socket.id];
