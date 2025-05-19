@@ -1,154 +1,194 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Онлайн доска для рисования</title>
-    <style>
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            font-family: Arial, sans-serif;
-            margin: 0;
-        }
-        #authContainer {
-            margin-top: 20px;
-            text-align: center;
-        }
-        #canvas {
-            border: 2px solid black;
-            display: none; /* Скрываем канвас до авторизации */
-        }
-        #nicknameInput {
-            padding: 5px;
-            margin-right: 10px;
-        }
-        #loginButton {
-            padding: 5px 10px;
-            cursor: pointer;
-        }
-        #userList {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px;
-            border-radius: 5px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .user {
-            display: flex;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-        .color-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Онлайн-доска</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f0f0;
+    }
+    #authContainer {
+      display: flex;
+      height: 100vh;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    #nicknameInput {
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      width: 250px;
+    }
+    #loginButton {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #canvas {
+      display: none;
+      border: 2px solid #333;
+      background: white;
+      border-radius: 10px;
+      margin: 60px auto;
+      display: block;
+    }
+    #userList, #myNickname, #toolbar {
+      position: absolute;
+      background: white;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    #userList {
+      top: 10px;
+      right: 10px;
+      font-size: 14px;
+    }
+    .user {
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+    }
+    .color-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    #myNickname {
+      top: 10px;
+      left: 10px;
+      font-weight: bold;
+    }
+    #toolbar {
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #colorPicker {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #clearBtn {
+      padding: 10px;
+      font-size: 14px;
+      border: none;
+      background: #e74c3c;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-    <div id="authContainer">
-        <input type="text" id="nicknameInput" placeholder="Введите ваш ник" maxlength="20">
-        <button id="loginButton">Войти</button>
-    </div>
-    <div id="userList"></div>
-    <canvas id="canvas" width="800" height="600"></canvas>
+  <div id="authContainer">
+    <input type="text" id="nicknameInput" placeholder="Введите ник">
+    <button id="loginButton">Войти</button>
+  </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const authContainer = document.getElementById('authContainer');
-        const nicknameInput = document.getElementById('nicknameInput');
-        const loginButton = document.getElementById('loginButton');
-        const userList = document.getElementById('userList');
-        let drawing = false;
-        let isAuthenticated = false;
-        let nickname = '';
+  <canvas id="canvas" width="800" height="600"></canvas>
+  <div id="myNickname"></div>
+  <div id="userList"></div>
+  <div id="toolbar">
+    <input type="color" id="colorPicker" />
+    <button id="clearBtn">Очистить</button>
+  </div>
 
-        // Функция авторизации
-        loginButton.addEventListener('click', () => {
-            const inputNickname = nicknameInput.value.trim();
-            if (inputNickname.length < 1) {
-                alert('Пожалуйста, введите ник!');
-                return;
-            }
-            nickname = inputNickname;
-            socket.emit('setNickname', nickname);
-            isAuthenticated = true;
-            authContainer.style.display = 'none';
-            canvas.style.display = 'block';
-        });
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const authContainer = document.getElementById('authContainer');
+    const nicknameInput = document.getElementById('nicknameInput');
+    const loginButton = document.getElementById('loginButton');
+    const myNickname = document.getElementById('myNickname');
+    const userList = document.getElementById('userList');
+    const colorPicker = document.getElementById('colorPicker');
+    const clearBtn = document.getElementById('clearBtn');
 
-        // Обработка рисования
-        canvas.addEventListener('mousedown', (e) => {
-            if (!isAuthenticated) return;
-            drawing = true;
-            draw(e);
-        });
+    let drawing = false;
+    let nickname = '';
+    let color = '#000000';
 
-        canvas.addEventListener('mousemove', (e) => {
-            if (!isAuthenticated || !drawing) return;
-            draw(e);
-        });
+    loginButton.onclick = () => {
+      nickname = nicknameInput.value.trim();
+      if (!nickname) return alert('Введите ник!');
+      socket.emit('setNickname', nickname);
+      authContainer.style.display = 'none';
+      canvas.style.display = 'block';
+      myNickname.style.display = 'block';
+      userList.style.display = 'block';
+      document.getElementById('toolbar').style.display = 'flex';
+      myNickname.innerText = `Вы: ${nickname}`;
+    };
 
-        canvas.addEventListener('mouseup', () => {
-            drawing = false;
-        });
+    canvas.onmousedown = (e) => { drawing = true; draw(e); };
+    canvas.onmouseup = () => { drawing = false; };
+    canvas.onmouseout = () => { drawing = false; };
+    canvas.onmousemove = (e) => { if (drawing) draw(e); };
 
-        canvas.addEventListener('mouseout', () => {
-            drawing = false;
-        });
+    function draw(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      socket.emit('draw', { x, y, color });
+    }
 
-        function draw(e) {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+    socket.on('draw', ({ x, y, color }) => {
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    });
 
-            const drawData = { x, y };
-            socket.emit('draw', drawData);
-        }
+    socket.on('loadHistory', (history) => {
+      history.forEach(draw => {
+        ctx.beginPath();
+        ctx.arc(draw.x, draw.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = draw.color;
+        ctx.fill();
+      });
+    });
 
-        // Загрузка истории рисования
-        socket.on('loadHistory', (history) => {
-            history.forEach(drawData => {
-                renderDraw(drawData);
-            });
-        });
+    socket.on('updateUsers', (users) => {
+      userList.innerHTML = '';
+      for (const id in users) {
+        const user = users[id];
+        const el = document.createElement('div');
+        el.className = 'user';
+        el.innerHTML = `<div class="color-indicator" style="background:${user.color}"></div>${user.nickname}`;
+        userList.appendChild(el);
+      }
+    });
 
-        // Обработка новых линий от сервера
-        socket.on('draw', (data) => {
-            renderDraw(data);
-        });
+    colorPicker.oninput = () => {
+      color = colorPicker.value;
+    };
 
-        // Функция отрисовки линии с цветом пользователя
-        function renderDraw(data) {
-            ctx.beginPath();
-            ctx.arc(data.x, data.y, 5, 0, Math.PI * 2);
-            ctx.fillStyle = data.color || '#000000';
-            ctx.fill();
-        }
+    clearBtn.onclick = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      socket.emit('clear');
+    };
 
-        // Обновление списка пользователей
-        socket.on('updateUsers', (users) => {
-            userList.innerHTML = '';
-            for (const userId in users) {
-                const user = users[userId];
-                const userDiv = document.createElement('div');
-                userDiv.className = 'user';
-                userDiv.innerHTML = `
-                    <span class="color-indicator" style="background-color: ${user.color};"></span>
-                    <span>${user.nickname}</span>
-                `;
-                userList.appendChild(userDiv);
-            }
-        });
-    </script>
+    socket.on('clear', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+  </script>
 </body>
 </html>
