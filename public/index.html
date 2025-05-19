@@ -29,6 +29,27 @@
       font-size: 16px;
       cursor: pointer;
     }
+    #chat {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      width: 300px;
+      height: 200px;
+      background: rgba(0, 0, 0, 0.6);
+      overflow-y: auto;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    #chatInput {
+      position: absolute;
+      bottom: 0;
+      width: 300px;
+      padding: 10px;
+      border: none;
+      background: #333;
+      color: white;
+      font-size: 14px;
+    }
     canvas {
       display: block;
     }
@@ -43,76 +64,82 @@
   </div>
 
   <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
+  
+  <div id="chat">
+    <div id="chatBox"></div>
+    <input type="text" id="chatInput" placeholder="Введите сообщение..." />
+  </div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-  const socket = io();
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  const menu = document.getElementById('menu');
-  const nicknameInput = document.getElementById('nickname');
-  const startBtn = document.getElementById('startBtn');
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const menu = document.getElementById('menu');
+    const nicknameInput = document.getElementById('nickname');
+    const startBtn = document.getElementById('startBtn');
+    const chatBox = document.getElementById('chatBox');
+    const chatInput = document.getElementById('chatInput');
 
-  let players = {};
-  let myId = null;
+    let players = {};
+    let myId = null;
 
-  const keys = {
-    up: false,
-    down: false,
-    left: false,
-    right: false
-  };
+    startBtn.onclick = () => {
+      const nick = nicknameInput.value.trim();
+      if (!nick) return alert('Введите ник');
+      menu.style.display = 'none';
+      canvas.style.display = 'block';
+      socket.emit('newPlayer', nick);
+    };
 
-  startBtn.onclick = () => {
-    const nick = nicknameInput.value.trim();
-    if (!nick) return alert('Введите ник');
-    menu.style.display = 'none';
-    canvas.style.display = 'block';
-    socket.emit('newPlayer', nick);
-  };
+    // Обработка ввода в чат
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && chatInput.value.trim() !== '') {
+        socket.emit('chat', chatInput.value.trim());
+        chatInput.value = ''; // Очищаем поле ввода
+      }
+    });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyW') keys.up = true;
-    if (e.code === 'KeyS') keys.down = true;
-    if (e.code === 'KeyA') keys.left = true;
-    if (e.code === 'KeyD') keys.right = true;
-  });
+    socket.on('init', (id) => {
+      myId = id;
+    });
 
-  document.addEventListener('keyup', (e) => {
-    if (e.code === 'KeyW') keys.up = false;
-    if (e.code === 'KeyS') keys.down = false;
-    if (e.code === 'KeyA') keys.left = false;
-    if (e.code === 'KeyD') keys.right = false;
-  });
+    socket.on('state', (serverPlayers) => {
+      players = serverPlayers;
+    });
 
-  // Отправка движения каждую 1/30 секунды
-  setInterval(() => {
-    socket.emit('move', keys);
-  }, 1000 / 30);
+    socket.on('chat', (message) => {
+      const chatMessage = document.createElement('div');
+      chatMessage.innerHTML = `<b style="color:${message.color}">${message.nickname}:</b> ${message.text}`;
+      chatBox.appendChild(chatMessage);
+      chatBox.scrollTop = chatBox.scrollHeight; // Прокрутка вниз
+    });
 
-  socket.on('init', (id) => {
-    myId = id;
-  });
+    document.addEventListener('keydown', (e) => {
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+        socket.emit('move', {
+          up: e.code === 'KeyW',
+          down: e.code === 'KeyS',
+          left: e.code === 'KeyA',
+          right: e.code === 'KeyD'
+        });
+      }
+    });
 
-  socket.on('state', (serverPlayers) => {
-    players = serverPlayers;
-  });
-
-  function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const id in players) {
-      const p = players[id];
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, 30, 30);
-      ctx.fillStyle = 'white';
-      ctx.font = '14px sans-serif';
-      ctx.fillText(p.nickname, p.x, p.y - 5);
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const id in players) {
+        const p = players[id];
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 30, 30);
+        ctx.fillStyle = 'white';
+        ctx.font = '14px sans-serif';
+        ctx.fillText(p.nickname, p.x, p.y - 5);
+      }
+      requestAnimationFrame(gameLoop);
     }
-    requestAnimationFrame(gameLoop);
-  }
 
-  gameLoop();
-</script>
-
+    gameLoop();
+  </script>
 </body>
 </html>
