@@ -44,59 +44,75 @@
 
   <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const menu = document.getElementById('menu');
-    const nicknameInput = document.getElementById('nickname');
-    const startBtn = document.getElementById('startBtn');
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const menu = document.getElementById('menu');
+  const nicknameInput = document.getElementById('nickname');
+  const startBtn = document.getElementById('startBtn');
 
-    let players = {};
-    let myId = null;
+  let players = {};
+  let myId = null;
 
-    startBtn.onclick = () => {
-      const nick = nicknameInput.value.trim();
-      if (!nick) return alert('Введите ник');
-      menu.style.display = 'none';
-      canvas.style.display = 'block';
-      socket.emit('newPlayer', nick);
-    };
+  const keys = {
+    up: false,
+    down: false,
+    left: false,
+    right: false
+  };
 
-    document.addEventListener('keydown', (e) => {
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
-        socket.emit('move', {
-          up: e.code === 'KeyW',
-          down: e.code === 'KeyS',
-          left: e.code === 'KeyA',
-          right: e.code === 'KeyD'
-        });
-      }
-    });
+  startBtn.onclick = () => {
+    const nick = nicknameInput.value.trim();
+    if (!nick) return alert('Введите ник');
+    menu.style.display = 'none';
+    canvas.style.display = 'block';
+    socket.emit('newPlayer', nick);
+  };
 
-    socket.on('init', (id) => {
-      myId = id;
-    });
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyW') keys.up = true;
+    if (e.code === 'KeyS') keys.down = true;
+    if (e.code === 'KeyA') keys.left = true;
+    if (e.code === 'KeyD') keys.right = true;
+  });
 
-    socket.on('state', (serverPlayers) => {
-      players = serverPlayers;
-    });
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyW') keys.up = false;
+    if (e.code === 'KeyS') keys.down = false;
+    if (e.code === 'KeyA') keys.left = false;
+    if (e.code === 'KeyD') keys.right = false;
+  });
 
-    function gameLoop() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const id in players) {
-        const p = players[id];
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 30, 30);
-        ctx.fillStyle = 'white';
-        ctx.font = '14px sans-serif';
-        ctx.fillText(p.nickname, p.x, p.y - 5);
-      }
-      requestAnimationFrame(gameLoop);
+  // Отправка движения каждую 1/30 секунды
+  setInterval(() => {
+    socket.emit('move', keys);
+  }, 1000 / 30);
+
+  socket.on('init', (id) => {
+    myId = id;
+  });
+
+  socket.on('state', (serverPlayers) => {
+    players = serverPlayers;
+  });
+
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const id in players) {
+      const p = players[id];
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, 30, 30);
+      ctx.fillStyle = 'white';
+      ctx.font = '14px sans-serif';
+      ctx.fillText(p.nickname, p.x, p.y - 5);
     }
+    requestAnimationFrame(gameLoop);
+  }
 
-    gameLoop();
-  </script>
+  gameLoop();
+</script>
+
 </body>
 </html>
