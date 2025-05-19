@@ -1,59 +1,48 @@
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const http = require('http');
+const socketio = require('socket.io');
 
-// Обслуживаем статические файлы из папки public
+const app = express();
+const server = http.createServer(app);
+const io = socketio(server);
+
+const PORT = 3000;
+
 app.use(express.static('public'));
 
-// Массив для хранения истории рисования
-let drawHistory = [];
-// Объект для хранения пользователей (ник + цвет)
-let users = {};
+const users = {};
+const history = [];
 
 io.on('connection', (socket) => {
-    console.log('Пользователь подключился');
+  console.log('Пользователь подключился:', socket.id);
 
-    // Отправляем новому пользователю историю рисования
-    socket.emit('loadHistory', drawHistory);
+  socket.on('setNickname', (nickname) => {
+    const userColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+    users[socket.id] = { nickname, color: userColor };
+    socket.emit('loadHistory', history);
+    io.emit('updateUsers', users);
+  });
 
-    // Принимаем ник от пользователя и генерируем цвет
-    socket.on('setNickname', (nickname) => {
-        socket.nickname = nickname;
-        // Генерируем случайный цвет
-        socket.color = '#' + Math.floor(Math.random() * 16777215).toString(16);
-        users[socket.id] = { nickname: socket.nickname, color: socket.color };
-        console.log(`Пользователь ${nickname} установил ник, цвет: ${socket.color}`);
+  socket.on('draw', (data) => {
+    const user = users[socket.id];
+    if (!user) return;
+    const drawData = { ...data, color: data.color || user.color };
+    history.push(drawData);
+    io.emit('draw', drawData);
+  });
 
-        // Отправляем обновлённый список пользователей всем
-        io.emit('updateUsers', users);
-    });
+  socket.on('clear', () => {
+    history.length = 0;
+    io.emit('clear');
+  });
 
-    socket.on('draw', (data) => {
-        // Добавляем ник и цвет пользователя к данным рисования
-        const drawData = {
-            ...data,
-            nickname: socket.nickname || 'Аноним',
-            color: socket.color || '#000000' // Чёрный по умолчанию
-        };
-
-        // Сохраняем в историю
-        drawHistory.push(drawData);
-
-        // Рассылаем всем, включая отправителя
-        io.emit('draw', drawData);
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`Пользователь ${socket.nickname || 'неизвестный'} отключился`);
-        // Удаляем пользователя из списка
-        delete users[socket.id];
-        // Обновляем список пользователей для всех
-        io.emit('updateUsers', users);
-    });
+  socket.on('disconnect', () => {
+    delete users[socket.id];
+    io.emit('updateUsers', users);
+    console.log('Отключился:', socket.id);
+  });
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Сервер запущен: http://localhost:${PORT}`);
 });
