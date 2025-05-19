@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Онлайн Рисование</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { background: #fff; display: block; }
+  </style>
+</head>
+<body>
+<canvas id="board"></canvas>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const socket = io();
+
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  let drawing = false;
+
+  canvas.addEventListener('mousedown', () => drawing = true);
+  canvas.addEventListener('mouseup', () => drawing = false);
+  canvas.addEventListener('mousemove', draw);
+
+  function draw(e) {
+    if (!drawing) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    socket.emit('draw', { x, y });
+
+    drawOnCanvas(x, y);
+  }
+
+  socket.on('draw', ({ x, y }) => {
+    drawOnCanvas(x, y);
+  });
+
+  function drawOnCanvas(x, y) {
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+</script>
+</body>
+</html>
