@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blend Cubes 🎲</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <style>
     canvas {
       border: 3px solid #ff3399;
@@ -29,6 +30,7 @@
     <h1 class="text-5xl neon-text my-4">Blend Cubes 🎲</h1>
     <input id="nickname" type="text" placeholder="Введи свой ник 😎" class="p-2 rounded bg-gray-800 text-white border border-pink-500">
     <button id="joinBtn" class="bg-pink-500 hover:bg-pink-700 pulse text-white font-bold py-2 px-4 rounded mt-4">Войти 🚪</button>
+    <p id="error" class="text-red-500 hidden">Ошибка подключения 😢</p>
   </div>
 
   <!-- 🎮 Экран лобби -->
@@ -54,6 +56,7 @@
     const gameScreen = document.getElementById('gameScreen');
     const nicknameInput = document.getElementById('nickname');
     const joinBtn = document.getElementById('joinBtn');
+    const errorDisplay = document.getElementById('error');
     const playerCount = document.getElementById('playerCount');
     const countdown = document.getElementById('countdown');
     const aliveCount = document.getElementById('aliveCount');
@@ -62,8 +65,8 @@
     const lobbyCtx = lobbyCanvas.getContext('2d');
     const gameCtx = gameCanvas.getContext('2d');
 
-    // 🌐 WebSocket
-    const ws = new WebSocket('ws://localhost:8080');
+    // 🌐 Socket.IO
+    const socket = io('http://localhost:8080', { transports: ['websocket'] });
     let playerId = null;
     let nickname = '';
     let players = {};
@@ -74,7 +77,7 @@
     joinBtn.addEventListener('click', () => {
       nickname = nicknameInput.value.trim();
       if (nickname) {
-        ws.send(JSON.stringify({ type: 'join', nickname }));
+        socket.emit('join', { nickname });
         loginScreen.classList.add('hidden');
         lobbyScreen.classList.remove('hidden');
         gameState = 'lobby';
@@ -86,17 +89,17 @@
     document.addEventListener('keyup', e => keys[e.key] = false);
 
     // 🖱️ Клик по кубику
-    gameCanvas.addEventListener('click  document.addEventListener('click', (e) => {
-      if (gameState === 'game') {
+    gameCanvas.addEventListener('click', (e) => {
+      if (gameState === 'game' && players[playerId]?.alive) {
         const rect = gameCanvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         for (const id in players) {
           if (id !== playerId && players[id].alive) {
-            const dx = players[id].x - x;
-            const dy = players[id].y - y;
+            const dx = players[id].x - (x + (players[playerId].x - 400));
+            const dy = players[id].y - (y + (players[playerId].y - 300));
             if (Math.hypot(dx, dy) < 20) {
-              ws.send(JSON.stringify({ type: 'kill', targetId: id }));
+              socket.emit('kill', { targetId: id });
               break;
             }
           }
@@ -105,32 +108,42 @@
     });
 
     // 📡 Обработка сообщений от сервера
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      switch (msg.type) {
-        case 'init':
-          playerId = msg.playerId;
-          break;
-        case 'update':
-          players = msg.players;
-          if (gameState === 'lobby') {
-            playerCount.textContent = `Игроков: ${Object.keys(players).length}`;
-            countdown.textContent = msg.countdown ? `Старт через: ${msg.countdown} сек 🕒` : '';
-          } else if (gameState === 'game') {
-            aliveCount.textContent = Object.values(players).filter(p => p.alive).length;
-          }
-          break;
-        case 'start':
-          lobbyScreen.classList.add('hidden');
-          gameScreen.classList.remove('hidden');
-          gameState = 'game';
-          break;
+    socket.on('init', (data) => {
+      playerId = data.playerId;
+    });
+
+    socket.on('update', (data) => {
+      players = data.players;
+      if (gameState === 'lobby') {
+        playerCount.textContent = `Игроков: ${Object.keys(players).length}`;
+        countdown.textContent = data.countdown ? `Старт через: ${data.countdown} сек 🕒` : '';
+      } else if (gameState === 'game') {
+        aliveCount.textContent = Object.values(players).filter(p => p.alive).length;
       }
-    };
+    });
+
+    socket.on('start', () => {
+      lobbyScreen.classList.add('hidden');
+      gameScreen.classList.remove('hidden');
+      gameState = 'game';
+      updateGame();
+    });
+
+    socket.on('connect_error', () => {
+      errorDisplay.textContent = 'Ошибка подключения 😢 Проверь сервер!';
+      errorDisplay.classList.remove('hidden');
+    });
 
     // 🎮 Обновление лобби
     function updateLobby() {
       lobbyCtx.clearRect(0, 0, lobbyCanvas.width, lobbyCanvas.height);
+      // 🌟 Анимированный фон
+      lobbyCtx.fillStyle = '#111';
+      lobbyCtx.fillRect(0, 0, lobbyCanvas.width, lobbyCanvas.height);
+      for (let i = 0; i < 50; i++) {
+        lobbyCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        lobbyCtx.fillRect(Math.random() * 800, Math.random() * 600, 2, 2);
+      }
       for (const id in players) {
         const p = players[id];
         lobbyCtx.fillStyle = p.alive ? '#ff3399' : '#555';
@@ -157,14 +170,18 @@
       gameCtx.fillRect(0, 0, 1000, 1000);
 
       // 🎲 Отрисовка игроков
+      const px = players[playerId]?.x || 400;
+      const py = players[playerId]?.y || 300;
       for (const id in players) {
         const p = players[id];
         if (p.alive) {
+          const drawX = p.x - (px - 400);
+          const drawY = p.y - (py - 300);
           gameCtx.fillStyle = '#ff3399';
-          gameCtx.fillRect(p.x - 10, p.y - 10, 20, 20);
+          gameCtx.fillRect(drawX - 10, drawY - 10, 20, 20);
           gameCtx.fillStyle = 'white';
           gameCtx.font = '14px Arial';
-          gameCtx.fillText(p.nickname, p.x - 10, p.y - 20);
+          gameCtx.fillText(p.nickname, drawX - 10, drawY - 20);
         }
       }
 
@@ -178,7 +195,7 @@
         if (keys.ArrowLeft || keys.a) dx -= 5;
         if (keys.ArrowRight || keys.d) dx += 5;
         if (dx || dy) {
-          ws.send(JSON.stringify({ type: 'move', dx, dy }));
+          socket.emit('move', { dx, dy });
         }
       }
 
@@ -186,9 +203,9 @@
     }
 
     // 🚀 Старт рендеринга
-    ws.onopen = () => {
+    socket.on('connect', () => {
       updateLobby();
-    };
+    });
   </script>
 </body>
 </html>
