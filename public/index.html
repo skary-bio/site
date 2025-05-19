@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Галактический Поход за КосмоБургерами 🍔</title>
+  <title>Blend Cubes 🎲</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     canvas {
       border: 3px solid #ff3399;
-      background: url('https://via.placeholder.com/800x600/000022?text=Космос');
+      background: #111;
     }
     .neon-text {
       text-shadow: 0 0 5px #ff3399, 0 0 10px #33ffcc;
@@ -24,211 +24,171 @@
   </style>
 </head>
 <body class="bg-gray-900 text-white flex flex-col items-center">
-  <h1 class="text-5xl neon-text my-4">Галактический Поход за КосмоБургерами 🍔</h1>
-  <div class="flex w-full max-w-5xl">
-    <!-- 📋 Левая панель: Таблица лидеров -->
-    <div class="w-1/5 p-4 bg-gray-800 rounded-lg">
-      <h2 class="text-2xl neon-text">Лидеры 🏆</h2>
-      <ul id="leaderboard">
-        <li class="text-yellow-400">1. БургерМен: 0 🍔</li>
-        <li class="text-gray-400">2. КосмоКорова: 0 🍔</li>
-        <li class="text-gray-400">3. Унитазник: 0 🍔</li>
-      </ul>
-    </div>
-    <!-- 🎮 Центральное поле -->
-    <div class="w-3/5">
-      <canvas id="gameCanvas" width="800" height="600"></canvas>
-      <div class="flex justify-between mt-2">
-        <div>Бургеры: <span id="burgers">0</span> 🍔</div>
-        <div>Время: <span id="timer">3:00</span> ⏱️</div>
-        <div>Здоровье: <span id="health">❤️❤️❤️</span></div>
-      </div>
-    </div>
-    <!-- 👜 Правая панель: Скины -->
-    <div class="w-1/5 p-4 bg-gray-800 rounded-lg">
-      <h2 class="text-2xl neon-text">Скины 🎨</h2>
-      <button id="skinBtn" class="bg-pink-500 hover:bg-pink-700 pulse text-white font-bold py-2 px-4 rounded w-full">Сменить скин 🚀</button>
-    </div>
+  <!-- 📋 Экран ввода ника -->
+  <div id="loginScreen" class="text-center">
+    <h1 class="text-5xl neon-text my-4">Blend Cubes 🎲</h1>
+    <input id="nickname" type="text" placeholder="Введи свой ник 😎" class="p-2 rounded bg-gray-800 text-white border border-pink-500">
+    <button id="joinBtn" class="bg-pink-500 hover:bg-pink-700 pulse text-white font-bold py-2 px-4 rounded mt-4">Войти 🚪</button>
   </div>
-  <!-- 🛠️ Нижняя панель: Способности -->
-  <div class="mt-4 flex space-x-4">
-    <button id="magnetBtn" class="bg-blue-500 hover:bg-blue-700 pulse text-white font-bold py-2 px-4 rounded">Бургерный Магнит 🧲</button>
-    <button id="shieldBtn" class="bg-blue-500 hover:bg-blue-700 pulse text-white font-bold py-2 px-4 rounded">Туалетный Щит 🛡️</button>
-    <button id="cowBtn" class="bg-blue-500 hover:bg-blue-700 pulse text-white font-bold py-2 px-4 rounded">Коровячий Рев 🐄</button>
+
+  <!-- 🎮 Экран лобби -->
+  <div id="lobbyScreen" class="hidden text-center">
+    <h1 class="text-5xl neon-text my-4">Лобби 🕒</h1>
+    <p>Ожидаем игроков... Минимум 3 👥</p>
+    <p id="playerCount">Игроков: 0</p>
+    <p id="countdown" class="text-2xl neon-text"></p>
+    <canvas id="lobbyCanvas" width="800" height="600"></canvas>
+  </div>
+
+  <!-- 🏃 Экран игры -->
+  <div id="gameScreen" class="hidden text-center">
+    <h1 class="text-5xl neon-text my-4">Blend Cubes 🎲</h1>
+    <p>Живых игроков: <span id="aliveCount">0</span> 👥</p>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
   </div>
 
   <script>
-    // 🎨 Получаем элементы
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const burgersDisplay = document.getElementById('burgers');
-    const timerDisplay = document.getElementById('timer');
-    const healthDisplay = document.getElementById('health');
-    const magnetBtn = document.getElementById('magnetBtn');
-    const shieldBtn = document.getElementById('shieldBtn');
-    const cowBtn = document.getElementById('cowBtn');
-    const skinBtn = document.getElementById('skinBtn');
+    // 🎨 Элементы DOM
+    const loginScreen = document.getElementById('loginScreen');
+    const lobbyScreen = document.getElementById('lobbyScreen');
+    const gameScreen = document.getElementById('gameScreen');
+    const nicknameInput = document.getElementById('nickname');
+    const joinBtn = document.getElementById('joinBtn');
+    const playerCount = document.getElementById('playerCount');
+    const countdown = document.getElementById('countdown');
+    const aliveCount = document.getElementById('aliveCount');
+    const lobbyCanvas = document.getElementById('lobbyCanvas');
+    const gameCanvas = document.getElementById('gameCanvas');
+    const lobbyCtx = lobbyCanvas.getContext('2d');
+    const gameCtx = gameCanvas.getContext('2d');
 
-    // 🚀 Состояние игры
-    let player = {
-      x: 400, y: 300, speed: 5, burgers: 0, health: 3,
-      skin: '🚀', isDancing: false, shield: false
-    };
-    let burgers = [];
-    let toilets = [];
-    let cows = [];
-    let gameTime = 180; // 3 минуты
-    let discoTimer = 0;
-    let skins = ['🚀', '🍔', '🚽', '🐄'];
+    // 🌐 WebSocket
+    const ws = new WebSocket('ws://localhost:8080');
+    let playerId = null;
+    let nickname = '';
+    let players = {};
+    let gameState = 'login';
+    let keys = {};
 
-    // 🍔 Создание бургеров
-    function spawnBurger() {
-      burgers.push({
-        x: Math.random() * 780 + 10,
-        y: Math.random() * 580 + 10
-      });
-    }
-
-    // 🚽 Создание унітазів
-    function spawnToilet() {
-      toilets.push({
-        x: Math.random() * 780 + 10,
-        y: Math.random() * 580 + 10,
-        paper: []
-      });
-    }
-
-    // 🐄 Создание коров
-    function spawnCow() {
-      cows.push({
-        x: Math.random() * 780 + 10,
-        y: Math.random() * 580 + 10
-      });
-    }
-
-    // 🎮 Обновление игры
-    function update() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // 🚀 Движение игрока
-      if (!player.isDancing) {
-        if (keys.ArrowUp) player.y = Math.max(10, player.y - player.speed);
-        if (keys.ArrowDown) player.y = Math.min(590, player.y + player.speed);
-        if (keys.ArrowLeft) player.x = Math.max(10, player.x - player.speed);
-        if (keys.ArrowRight) player.x = Math.min(790, player.x + player.speed);
-      } else {
-        player.x += Math.sin(Date.now() / 100) * 2; // Танец
+    // 🚪 Вход в игру
+    joinBtn.addEventListener('click', () => {
+      nickname = nicknameInput.value.trim();
+      if (nickname) {
+        ws.send(JSON.stringify({ type: 'join', nickname }));
+        loginScreen.classList.add('hidden');
+        lobbyScreen.classList.remove('hidden');
+        gameState = 'lobby';
       }
-
-      // 🍔 Отрисовка бургеров
-      burgers.forEach((burger, i) => {
-        ctx.font = '30px Arial';
-        ctx.fillText('🍔', burger.x, burger.y);
-        if (Math.hypot(player.x - burger.x, player.y - burger.y) < 30) {
-          player.burgers++;
-          burgers.splice(i, 1);
-          burgersDisplay.textContent = player.burgers;
-        }
-      });
-
-      // 🚽 Отрисовка унитазов и рулонов
-      toilets.forEach(toilet => {
-        ctx.font = '30px Arial';
-        ctx.fillText('🚽', toilet.x, toilet.y);
-        if (Math.random() < 0.02) {
-          toilet.paper.push({
-            x: toilet.x, y: toilet.y,
-            dx: (player.x - toilet.x) / 100,
-            dy: (player.y - toilet.y) / 100
-          });
-        }
-        toilet.paper.forEach((paper, i) => {
-          ctx.fillText('🧻', paper.x, paper.y);
-          paper.x += paper.dx;
-          paper.y += paper.dy;
-          if (Math.hypot(player.x - paper.x, player.y - paper.y) < 20 && !player.shield) {
-            player.health--;
-            healthDisplay.textContent = '❤️'.repeat(player.health);
-            toilet.paper.splice(i, 1);
-            if (player.health <= 0) alert('Игра окончена! Ты собрал ' + player.burgers + ' бургеров 🍔');
-          }
-        });
-      });
-
-      // 🐄 Отрисовка коров и диско
-      cows.forEach(cow => {
-        ctx.font = '30px Arial';
-        ctx.fillText('🐄', cow.x, cow.y);
-        if (Math.random() < 0.005) {
-          discoTimer = 5 * 60; // 5 секунд
-          player.isDancing = true;
-        }
-      });
-
-      // ⏱️ Обновление таймера
-      gameTime--;
-      timerDisplay.textContent = `${Math.floor(gameTime / 60)}:${(gameTime % 60).toString().padStart(2, '0')}`;
-      if (gameTime <= 0) {
-        alert('Матч окончен! Ты собрал ' + player.burgers + ' бургеров 🍔');
-        gameTime = 180;
-        player.burgers = 0;
-        player.health = 3;
-        burgers = [];
-        toilets = [];
-        cows = [];
-      }
-
-      // 🕺 Диско-шторм
-      if (discoTimer > 0) {
-        discoTimer--;
-        ctx.fillStyle = `hsl(${Date.now() % 360}, 100%, 50%)`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        if (discoTimer === 0) player.isDancing = false;
-      }
-
-      // 🚀 Отрисовка игрока
-      ctx.font = '30px Arial';
-      ctx.fillText(player.skin, player.x, player.y);
-
-      // 🍔 Спавн объектов
-      if (Math.random() < 0.05) spawnBurger();
-      if (Math.random() < 0.01) spawnToilet();
-      if (Math.random() < 0.005) spawnCow();
-
-      requestAnimationFrame(update);
-    }
+    });
 
     // 🎹 Управление
-    let keys = {};
     document.addEventListener('keydown', e => keys[e.key] = true);
     document.addEventListener('keyup', e => keys[e.key] = false);
 
-    // 🧲 Способности
-    magnetBtn.addEventListener('click', () => {
-      burgers.forEach(burger => {
-        burger.x = player.x;
-        burger.y = player.y;
-      });
+    // 🖱️ Клик по кубику
+    gameCanvas.addEventListener('click  document.addEventListener('click', (e) => {
+      if (gameState === 'game') {
+        const rect = gameCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        for (const id in players) {
+          if (id !== playerId && players[id].alive) {
+            const dx = players[id].x - x;
+            const dy = players[id].y - y;
+            if (Math.hypot(dx, dy) < 20) {
+              ws.send(JSON.stringify({ type: 'kill', targetId: id }));
+              break;
+            }
+          }
+        }
+      }
     });
 
-    shieldBtn.addEventListener('click', () => {
-      player.shield = true;
-      setTimeout(() => player.shield = false, 5000);
-    });
+    // 📡 Обработка сообщений от сервера
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      switch (msg.type) {
+        case 'init':
+          playerId = msg.playerId;
+          break;
+        case 'update':
+          players = msg.players;
+          if (gameState === 'lobby') {
+            playerCount.textContent = `Игроков: ${Object.keys(players).length}`;
+            countdown.textContent = msg.countdown ? `Старт через: ${msg.countdown} сек 🕒` : '';
+          } else if (gameState === 'game') {
+            aliveCount.textContent = Object.values(players).filter(p => p.alive).length;
+          }
+          break;
+        case 'start':
+          lobbyScreen.classList.add('hidden');
+          gameScreen.classList.remove('hidden');
+          gameState = 'game';
+          break;
+      }
+    };
 
-    cowBtn.addEventListener('click', () => {
-      discoTimer = 3 * 60; // 3 секунды
-      player.isDancing = true;
-    });
+    // 🎮 Обновление лобби
+    function updateLobby() {
+      lobbyCtx.clearRect(0, 0, lobbyCanvas.width, lobbyCanvas.height);
+      for (const id in players) {
+        const p = players[id];
+        lobbyCtx.fillStyle = p.alive ? '#ff3399' : '#555';
+        lobbyCtx.fillRect(p.x, p.y, 20, 20);
+        lobbyCtx.fillStyle = 'white';
+        lobbyCtx.font = '14px Arial';
+        lobbyCtx.fillText(p.nickname, p.x, p.y - 10);
+      }
+      if (gameState === 'lobby') requestAnimationFrame(updateLobby);
+    }
 
-    // 🎨 Смена скина
-    skinBtn.addEventListener('click', () => {
-      player.skin = skins[Math.floor(Math.random() * skins.length)];
-    });
+    // 🏃 Обновление игры
+    function updateGame() {
+      gameCtx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
 
-    // 🚀 Старт игры
-    update();
+      // 🎥 Ограничение поля зрения
+      gameCtx.save();
+      gameCtx.beginPath();
+      gameCtx.arc(400, 300, 100, 0, Math.PI * 2);
+      gameCtx.clip();
+
+      // 🗺️ Отрисовка карты
+      gameCtx.fillStyle = '#222';
+      gameCtx.fillRect(0, 0, 1000, 1000);
+
+      // 🎲 Отрисовка игроков
+      for (const id in players) {
+        const p = players[id];
+        if (p.alive) {
+          gameCtx.fillStyle = '#ff3399';
+          gameCtx.fillRect(p.x - 10, p.y - 10, 20, 20);
+          gameCtx.fillStyle = 'white';
+          gameCtx.font = '14px Arial';
+          gameCtx.fillText(p.nickname, p.x - 10, p.y - 20);
+        }
+      }
+
+      gameCtx.restore();
+
+      // 🚶 Движение
+      if (gameState === 'game' && players[playerId]?.alive) {
+        let dx = 0, dy = 0;
+        if (keys.ArrowUp || keys.w) dy -= 5;
+        if (keys.ArrowDown || keys.s) dy += 5;
+        if (keys.ArrowLeft || keys.a) dx -= 5;
+        if (keys.ArrowRight || keys.d) dx += 5;
+        if (dx || dy) {
+          ws.send(JSON.stringify({ type: 'move', dx, dy }));
+        }
+      }
+
+      if (gameState === 'game') requestAnimationFrame(updateGame);
+    }
+
+    // 🚀 Старт рендеринга
+    ws.onopen = () => {
+      updateLobby();
+    };
   </script>
 </body>
 </html>
