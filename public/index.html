@@ -3,100 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <title>Онлайн Бегалка</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: sans-serif;
-      background: #1e1e1e;
-      color: white;
-    }
-    #menu {
-      position: absolute;
-      top: 40%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-    }
-    #nickname {
-      padding: 10px;
-      font-size: 16px;
-      width: 200px;
-    }
-    #startBtn {
-      padding: 10px 20px;
-      margin-top: 10px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="menu">
-    <h2>Введите ник:</h2>
-    <input id="nickname" maxlength="20" placeholder="Ваш ник"/>
-    <br>
-    <button id="startBtn">Начать</button>
+  <div id="login">
+    <h2>Введите ник и выберите цвет</h2>
+    <input type="text" id="nickname" placeholder="Никнейм" maxlength="15">
+    <input type="color" id="color" value="#ff0000">
+    <button id="startBtn">Играть</button>
   </div>
-
-  <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
-
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
   <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const menu = document.getElementById('menu');
-    const nicknameInput = document.getElementById('nickname');
-    const startBtn = document.getElementById('startBtn');
-
-    let players = {};
-    let myId = null;
-
-    startBtn.onclick = () => {
-      const nick = nicknameInput.value.trim();
-      if (!nick) return alert('Введите ник');
-      menu.style.display = 'none';
-      canvas.style.display = 'block';
-      socket.emit('newPlayer', nick);
-    };
-
-    document.addEventListener('keydown', (e) => {
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
-        socket.emit('move', {
-          up: e.code === 'KeyW',
-          down: e.code === 'KeyS',
-          left: e.code === 'KeyA',
-          right: e.code === 'KeyD'
-        });
-      }
-    });
-
-    socket.on('init', (id) => {
-      myId = id;
-    });
-
-    socket.on('state', (serverPlayers) => {
-      players = serverPlayers;
-    });
-
-    function gameLoop() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const id in players) {
-        const p = players[id];
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 30, 30);
-        ctx.fillStyle = 'white';
-        ctx.font = '14px sans-serif';
-        ctx.fillText(p.nickname, p.x, p.y - 5);
-      }
-      requestAnimationFrame(gameLoop);
-    }
-
-    gameLoop();
-  </script>
+  <script src="script.js"></script>
 </body>
 </html>
