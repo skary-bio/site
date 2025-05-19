@@ -1,48 +1,47 @@
 const express = require('express');
-const http = require('http');
-const socketio = require('socket.io');
-
 const app = express();
-const server = http.createServer(app);
-const io = socketio(server);
-
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
 const PORT = 3000;
 
-app.use(express.static('public'));
+app.use(express.static(__dirname + '/public'));
 
-const users = {};
-const history = [];
+const players = {};
 
 io.on('connection', (socket) => {
-  console.log('Пользователь подключился:', socket.id);
+  console.log('Новое подключение:', socket.id);
 
-  socket.on('setNickname', (nickname) => {
-    const userColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
-    users[socket.id] = { nickname, color: userColor };
-    socket.emit('loadHistory', history);
-    io.emit('updateUsers', users);
+  socket.emit('init', socket.id);
+
+  socket.on('newPlayer', (nickname) => {
+    players[socket.id] = {
+      x: 100 + Math.random() * 500,
+      y: 100 + Math.random() * 400,
+      nickname: nickname,
+      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+    };
+    io.emit('state', players);
   });
 
-  socket.on('draw', (data) => {
-    const user = users[socket.id];
-    if (!user) return;
-    const drawData = { ...data, color: data.color || user.color };
-    history.push(drawData);
-    io.emit('draw', drawData);
-  });
+  socket.on('move', (dir) => {
+    const speed = 5;
+    const p = players[socket.id];
+    if (!p) return;
 
-  socket.on('clear', () => {
-    history.length = 0;
-    io.emit('clear');
+    if (dir.up) p.y -= speed;
+    if (dir.down) p.y += speed;
+    if (dir.left) p.x -= speed;
+    if (dir.right) p.x += speed;
+
+    io.emit('state', players);
   });
 
   socket.on('disconnect', () => {
-    delete users[socket.id];
-    io.emit('updateUsers', users);
-    console.log('Отключился:', socket.id);
+    delete players[socket.id];
+    io.emit('state', players);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Сервер запущен: http://localhost:${PORT}`);
+http.listen(PORT, () => {
+  console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
