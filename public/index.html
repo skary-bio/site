@@ -65,8 +65,11 @@
     const lobbyCtx = lobbyCanvas.getContext('2d');
     const gameCtx = gameCanvas.getContext('2d');
 
-    // 🌐 Socket.IO
-    const socket = io('http://localhost:8080', { transports: ['websocket'] });
+    // 🌐 Socket.IO (укажи свой домен или оставь localhost для теста)
+    const socket = io('YOUR_DOMAIN_OR_IP:8080', { 
+      transports: ['websocket'],
+      secure: true // Используй true для HTTPS/WSS
+    });
     let playerId = null;
     let nickname = '';
     let players = {};
@@ -129,8 +132,8 @@
       updateGame();
     });
 
-    socket.on('connect_error', () => {
-      errorDisplay.textContent = 'Ошибка подключения 😢 Проверь сервер!';
+    socket.on('connect_error', (err) => {
+      errorDisplay.textContent = `Ошибка подключения 😢 ${err.message}`;
       errorDisplay.classList.remove('hidden');
     });
 
