@@ -7,12 +7,15 @@ const PORT = 3000;
 app.use(express.static(__dirname + '/public'));
 
 const players = {};
+const chatHistory = []; // История чата
 
 io.on('connection', (socket) => {
   console.log('Новое подключение:', socket.id);
 
+  // Инициализация нового игрока
   socket.emit('init', socket.id);
 
+  // Создание нового игрока
   socket.on('newPlayer', (nickname) => {
     players[socket.id] = {
       x: 100 + Math.random() * 500,
@@ -23,31 +26,7 @@ io.on('connection', (socket) => {
     io.emit('state', players);
   });
 
-const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
-const PORT = 3000;
-
-app.use(express.static(__dirname + '/public'));
-
-const players = {};
-
-io.on('connection', (socket) => {
-  console.log('Новое подключение:', socket.id);
-
-  socket.emit('init', socket.id);
-
-  socket.on('newPlayer', (nickname) => {
-    players[socket.id] = {
-      x: 100 + Math.random() * 500,
-      y: 100 + Math.random() * 400,
-      nickname: nickname,
-      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
-    };
-    io.emit('state', players);
-  });
-
+  // Обработка движения
   socket.on('move', (dir) => {
     const speed = 5;
     const p = players[socket.id];
@@ -61,6 +40,22 @@ io.on('connection', (socket) => {
     io.emit('state', players);
   });
 
+  // Обработка сообщений чата
+  socket.on('chat', (message) => {
+    const p = players[socket.id];
+    if (!p) return;
+
+    const chatMessage = {
+      nickname: p.nickname,
+      color: p.color,
+      text: message
+    };
+
+    chatHistory.push(chatMessage);
+    io.emit('chat', chatMessage); // Отправить всем подключенным игрокам
+  });
+
+  // Удаление игрока при отключении
   socket.on('disconnect', () => {
     delete players[socket.id];
     io.emit('state', players);
