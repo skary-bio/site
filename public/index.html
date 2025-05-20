@@ -3,211 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blend Cubes 🎲</title>
+  <title>Онлайн-чат</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <style>
-    canvas {
-      border: 3px solid #ff3399;
-      background: #111;
-    }
-    .neon-text {
-      text-shadow: 0 0 5px #ff3399, 0 0 10px #33ffcc;
-    }
-    .pulse:hover {
-      animation: pulse 0.3s infinite;
-    }
-    @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.1); }
-      100% { transform: scale(1); }
-    }
-  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 </head>
-<body class="bg-gray-900 text-white flex flex-col items-center">
-  <!-- 📋 Экран ввода ника -->
-  <div id="loginScreen" class="text-center">
-    <h1 class="text-5xl neon-text my-4">Blend Cubes 🎲</h1>
-    <input id="nickname" type="text" placeholder="Введи свой ник 😎" class="p-2 rounded bg-gray-800 text-white border border-pink-500">
-    <button id="joinBtn" class="bg-pink-500 hover:bg-pink-700 pulse text-white font-bold py-2 px-4 rounded mt-4">Войти 🚪</button>
-    <p id="error" class="text-red-500 hidden">Ошибка подключения 😢</p>
-  </div>
-
-  <!-- 🎮 Экран лобби -->
-  <div id="lobbyScreen" class="hidden text-center">
-    <h1 class="text-5xl neon-text my-4">Лобби 🕒</h1>
-    <p>Ожидаем игроков... Минимум 3 👥</p>
-    <p id="playerCount">Игроков: 0</p>
-    <p id="countdown" class="text-2xl neon-text"></p>
-    <canvas id="lobbyCanvas" width="800" height="600"></canvas>
-  </div>
-
-  <!-- 🏃 Экран игры -->
-  <div id="gameScreen" class="hidden text-center">
-    <h1 class="text-5xl neon-text my-4">Blend Cubes 🎲</h1>
-    <p>Живых игроков: <span id="aliveCount">0</span> 👥</p>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+    <h1 class="text-2xl font-bold text-center mb-4">Онлайн-чат</h1>
+    
+    <!-- Ввод ника -->
+    <div id="nicknameSection" class="mb-4">
+      <input id="nicknameInput" type="text" placeholder="Введите ваш ник" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button id="setNickname" class="mt-2 w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Войти в чат</button>
+    </div>
+    
+    <!-- Область чата -->
+    <div id="chatSection" class="hidden">
+      <div id="chatBox" class="h-64 overflow-y-auto border p-4 mb-4 rounded bg-gray-50"></div>
+      <input id="messageInput" type="text" placeholder="Введите сообщение" class="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button id="sendMessage" class="mt-2 w-full bg-green-500 text-white p-2 rounded hover:bg-green-600">Отправить</button>
+    </div>
   </div>
 
   <script>
-    // 🎨 Элементы DOM
-    const loginScreen = document.getElementById('loginScreen');
-    const lobbyScreen = document.getElementById('lobbyScreen');
-    const gameScreen = document.getElementById('gameScreen');
-    const nicknameInput = document.getElementById('nickname');
-    const joinBtn = document.getElementById('joinBtn');
-    const errorDisplay = document.getElementById('error');
-    const playerCount = document.getElementById('playerCount');
-    const countdown = document.getElementById('countdown');
-    const aliveCount = document.getElementById('aliveCount');
-    const lobbyCanvas = document.getElementById('lobbyCanvas');
-    const gameCanvas = document.getElementById('gameCanvas');
-    const lobbyCtx = lobbyCanvas.getContext('2d');
-    const gameCtx = gameCanvas.getContext('2d');
-
-    // 🌐 Socket.IO (укажи свой домен или оставь localhost для теста)
-    const socket = io('YOUR_DOMAIN_OR_IP:8080', { 
-      transports: ['websocket'],
-      secure: true // Используй true для HTTPS/WSS
-    });
-    let playerId = null;
+    const socket = io('http://localhost:3000'); // Подключение к серверу
+    const nicknameSection = document.getElementById('nicknameSection');
+    const chatSection = document.getElementById('chatSection');
+    const nicknameInput = document.getElementById('nicknameInput');
+    const setNickname = document.getElementById('setNickname');
+    const messageInput = document.getElementById('messageInput');
+    const sendMessage = document.getElementById('sendMessage');
+    const chatBox = document.getElementById('chatBox');
     let nickname = '';
-    let players = {};
-    let gameState = 'login';
-    let keys = {};
 
-    // 🚪 Вход в игру
-    joinBtn.addEventListener('click', () => {
-      nickname = nicknameInput.value.trim();
-      if (nickname) {
-        socket.emit('join', { nickname });
-        loginScreen.classList.add('hidden');
-        lobbyScreen.classList.remove('hidden');
-        gameState = 'lobby';
+    // Установка ника
+    setNickname.addEventListener('click', () => {
+      if (nicknameInput.value.trim()) {
+        nickname = nicknameInput.value.trim();
+        nicknameSection.classList.add('hidden');
+        chatSection.classList.remove('hidden');
+        socket.emit('setNickname', nickname); // Отправка ника на сервер
+        messageInput.focus();
+      } else {
+        alert('Пожалуйста, введите ник!');
       }
     });
 
-    // 🎹 Управление
-    document.addEventListener('keydown', e => keys[e.key] = true);
-    document.addEventListener('keyup', e => keys[e.key] = false);
+    // Отправка сообщения
+    sendMessage.addEventListener('click', () => {
+      sendMessageHandler();
+    });
 
-    // 🖱️ Клик по кубику
-    gameCanvas.addEventListener('click', (e) => {
-      if (gameState === 'game' && players[playerId]?.alive) {
-        const rect = gameCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        for (const id in players) {
-          if (id !== playerId && players[id].alive) {
-            const dx = players[id].x - (x + (players[playerId].x - 400));
-            const dy = players[id].y - (y + (players[playerId].y - 300));
-            if (Math.hypot(dx, dy) < 20) {
-              socket.emit('kill', { targetId: id });
-              break;
-            }
-          }
-        }
+    // Отправка сообщения по нажатию Enter
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessageHandler();
       }
     });
 
-    // 📡 Обработка сообщений от сервера
-    socket.on('init', (data) => {
-      playerId = data.playerId;
-    });
-
-    socket.on('update', (data) => {
-      players = data.players;
-      if (gameState === 'lobby') {
-        playerCount.textContent = `Игроков: ${Object.keys(players).length}`;
-        countdown.textContent = data.countdown ? `Старт через: ${data.countdown} сек 🕒` : '';
-      } else if (gameState === 'game') {
-        aliveCount.textContent = Object.values(players).filter(p => p.alive).length;
+    function sendMessageHandler() {
+      const message = messageInput.value.trim();
+      if (message) {
+        socket.emit('chatMessage', { nickname, message }); // Отправка сообщения на сервер
+        messageInput.value = '';
       }
-    });
-
-    socket.on('start', () => {
-      lobbyScreen.classList.add('hidden');
-      gameScreen.classList.remove('hidden');
-      gameState = 'game';
-      updateGame();
-    });
-
-    socket.on('connect_error', (err) => {
-      errorDisplay.textContent = `Ошибка подключения 😢 ${err.message}`;
-      errorDisplay.classList.remove('hidden');
-    });
-
-    // 🎮 Обновление лобби
-    function updateLobby() {
-      lobbyCtx.clearRect(0, 0, lobbyCanvas.width, lobbyCanvas.height);
-      // 🌟 Анимированный фон
-      lobbyCtx.fillStyle = '#111';
-      lobbyCtx.fillRect(0, 0, lobbyCanvas.width, lobbyCanvas.height);
-      for (let i = 0; i < 50; i++) {
-        lobbyCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        lobbyCtx.fillRect(Math.random() * 800, Math.random() * 600, 2, 2);
-      }
-      for (const id in players) {
-        const p = players[id];
-        lobbyCtx.fillStyle = p.alive ? '#ff3399' : '#555';
-        lobbyCtx.fillRect(p.x, p.y, 20, 20);
-        lobbyCtx.fillStyle = 'white';
-        lobbyCtx.font = '14px Arial';
-        lobbyCtx.fillText(p.nickname, p.x, p.y - 10);
-      }
-      if (gameState === 'lobby') requestAnimationFrame(updateLobby);
     }
 
-    // 🏃 Обновление игры
-    function updateGame() {
-      gameCtx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+    // Получение сообщений от сервера
+    socket.on('chatMessage', (data) => {
+      const messageElement = document.createElement('div');
+      messageElement.classList.add('p-2', 'border-b', 'border-gray-200');
+      messageElement.innerHTML = `<strong>${data.nickname}:</strong> ${data.message}`;
+      chatBox.appendChild(messageElement);
+      chatBox.scrollTop = chatBox.scrollHeight; // Прокрутка вниз
+    });
 
-      // 🎥 Ограничение поля зрения
-      gameCtx.save();
-      gameCtx.beginPath();
-      gameCtx.arc(400, 300, 100, 0, Math.PI * 2);
-      gameCtx.clip();
+    // Уведомление о подключении нового пользователя
+    socket.on('userConnected', (nickname) => {
+      const messageElement = document.createElement('div');
+      messageElement.classList.add('p-2', 'text-gray-500', 'italic');
+      messageElement.textContent = `${nickname} присоединился к чату`;
+      chatBox.appendChild(messageElement);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
 
-      // 🗺️ Отрисовка карты
-      gameCtx.fillStyle = '#222';
-      gameCtx.fillRect(0, 0, 1000, 1000);
-
-      // 🎲 Отрисовка игроков
-      const px = players[playerId]?.x || 400;
-      const py = players[playerId]?.y || 300;
-      for (const id in players) {
-        const p = players[id];
-        if (p.alive) {
-          const drawX = p.x - (px - 400);
-          const drawY = p.y - (py - 300);
-          gameCtx.fillStyle = '#ff3399';
-          gameCtx.fillRect(drawX - 10, drawY - 10, 20, 20);
-          gameCtx.fillStyle = 'white';
-          gameCtx.font = '14px Arial';
-          gameCtx.fillText(p.nickname, drawX - 10, drawY - 20);
-        }
-      }
-
-      gameCtx.restore();
-
-      // 🚶 Движение
-      if (gameState === 'game' && players[playerId]?.alive) {
-        let dx = 0, dy = 0;
-        if (keys.ArrowUp || keys.w) dy -= 5;
-        if (keys.ArrowDown || keys.s) dy += 5;
-        if (keys.ArrowLeft || keys.a) dx -= 5;
-        if (keys.ArrowRight || keys.d) dx += 5;
-        if (dx || dy) {
-          socket.emit('move', { dx, dy });
-        }
-      }
-
-      if (gameState === 'game') requestAnimationFrame(updateGame);
-    }
-
-    // 🚀 Старт рендеринга
-    socket.on('connect', () => {
-      updateLobby();
+    // Уведомление об отключении пользователя
+    socket.on('userDisconnected', (nickname) => {
+      const messageElement = document.createElement('div');
+      messageElement.classList.add('p-2', 'text-gray-500', 'italic');
+      messageElement.textContent = `${nickname} покинул чат`;
+      chatBox.appendChild(messageElement);
+      chatBox.scrollTop = chatBox.scrollHeight;
     });
   </script>
 </body>
